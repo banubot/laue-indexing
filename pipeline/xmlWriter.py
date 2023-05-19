@@ -31,7 +31,6 @@ class XMLWriter:
         self.recipLatticeTexts = ['astar', 'bstar', 'cstar']
         self.hklsTexts = ['h', 'k', 'l', 'PkIndex']
         self.xtlTexts = ['structureDesc', 'xtlFile', 'SpaceGroup']
-        self.atomAttrs = ['Ni', 'label', 'n', 'symbol']
 
     def write(self, xmlSteps, xmlOutFile):
         allSteps = Element('AllSteps')
@@ -106,7 +105,19 @@ class XMLWriter:
         latticeParameters = Element('latticeParameters')
         latticeParameters = SubElement(xtl, 'latticeParameters', unit=args.latticeParametersUnit)
         latticeParameters.text = args.latticeParameters
-        xtl.append(self._getElement('atom', args, self.atomAttrs))
+        #parse out values of atom description
+        #from AtomDesctiption1='{Ni001  0 0 0 1} to
+        #<atom label=\'Ni001\' n=\'1\' symbol=\'Ni\'>0 0 0</atom>\n
+        n = 1
+        while hasattr(args, f'AtomDesctiption{n}'):
+            atom = getattr(args, f'AtomDesctiption{n}').replace('}', '').replace('{', '').split()
+            elem = Element('atom')
+            elem.set('n', str(n))
+            elem.set('label', atom[0])
+            elem.set('symbol', ''.join([i for i in atom[0] if not i.isdigit()])) #get rid of numbers
+            elem.set('text', ' '.join(atom[1:-1]))
+            xtl.append(elem)
+            n += 1
         return xtl
 
     def _getElement(self, tag, args, attrs=[], texts=[]):

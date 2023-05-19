@@ -1,13 +1,13 @@
 peakProgram: peaksearch
-threshold: 250
+threshold: 0.05
 thresholdRatio: -1
 maxRfactor: 0.5
-boxsize: 18
+boxsize: 10
 max_number: 300
 min_separation: 10
 peakShape: Lorentzian
-#scanPointStart: 50
-#scanPointEnd: 150
+#scanPointStart: 50 
+#scanPointEnd: 60
 #depthRangeStart: 50
 #depthRangeEnd: 60
 detectorCropX1: 0 #min 0 max 2047
@@ -17,9 +17,8 @@ detectorCropY2: 2047
 min_size: 1.13
 max_peaks: 300
 smooth: 0
-depth: 0
 maskFile: ''
-indexKeVmaxCalc: 17.2
+indexKeVmaxCalc: 18.2
 indexKeVmaxTest: 40.0
 indexAngleTolerance: 0.1
 indexH: 1
@@ -34,11 +33,8 @@ latticeParametersUnit: nm
 indexProgram: euler
 pathbins: /clhome/EPIX34ID/dev/hannah-dev/laue-indexing
 outputFolder: /clhome/EPIX34ID/dev/hannah-dev/laue-indexing/output
-#/data34b/Run2023-1/test_index_XEOL/output
 #filefolder: /eagle/APSDataAnalysis/LAUE/repacks_manual/repacks_100mn_thresh_10/consgeo_Ni2_100mN_285
-filefolder: /local/laue_34ide/data/LAUE1
-#/data34b/Run2023-1/XEOL223/HAs_long/LAUE1
-filenamePrefix: HAs_long_laue1_
+filefolder: /data/laue34/repacks_10mn/consgeo/
+filenamePrefix: out_
 geoFile: /clhome/EPIX34ID/dev/hannah-dev/laue-indexing/pipeline/config/geoN_2023-02-07_19-19-10.xml
-crystFile: /clhome/EPIX34ID/dev/hannah-dev/laue-indexing/pipeline/config/CdTe.xml
-depth: 0
+crystFile: /clhome/EPIX34ID/dev/hannah-dev/laue-indexing/pipeline/config/Ni.xml

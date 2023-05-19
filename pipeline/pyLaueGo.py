@@ -3,7 +3,6 @@
 import h5py
 import numpy as np
 import os
-import glob
 import argparse
 import yaml
 import subprocess as sub
@@ -22,8 +21,10 @@ class PyLaueGo:
         #global args shared for all samples e.g. title
         globalArgs = self.parseArgs(description='Runs Laue Indexing.') #TODO better description
         now = datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-        self.errorLog = f"{globalArgs.outputFolder}/error_{now}.log"
+        self.errorLog = f"{globalArgs.outputFolder}/error/error_{now}.log"
         try:
+            if rank == 0:
+                self.createOutputDirectories(globalArgs)
             xmlWriter = XMLWriter()
             xmlSteps = []
             processFiles = self.getFilesByRank(rank, size, globalArgs)
@@ -40,7 +41,7 @@ class PyLaueGo:
                 #recieve all collected steps from manager node and combine
                 for recv_rank in range(1, size):
                     xmlSteps += comm.recv(source=recv_rank)
-                xmlOut = f'{globalArgs.outputFolder}/{os.path.basename(globalArgs.filefolder)}.xml'
+                xmlOut = os.path.join(globalArgs.outputFolder, f'{globalArgs.filenamePrefix}indexed.xml')
                 xmlWriter.write(xmlSteps, xmlOut)
         except:
             with open(self.errorLog, 'a') as f:
@@ -50,7 +51,7 @@ class PyLaueGo:
     def parseArgs(self, description):
         ''' get user inputs and if user didn't input a value, get default value '''
         self.parser.add_argument(f'--configFile', dest='configFile', required=True)
-        args = self.parser.parse_args()
+        args = self.parser.parse_known_args()[0]
         with open(args.configFile) as f:
             defaults = yaml.safe_load(f)
         for arg in defaults:
@@ -60,6 +61,14 @@ class PyLaueGo:
             if not args.__dict__.get(defaultArg):
                 setattr(args, defaultArg, defaults.get(defaultArg))
         return args
+
+    def createOutputDirectories(self, args):
+        ''' set up output directory structure '''
+        outputDirectories = ['peaks', 'p2q', 'index', 'error']
+        for dir in outputDirectories:
+            fullPath = os.path.join(args.outputFolder, dir)
+            if not os.path.exists(fullPath):
+                os.mkdir(fullPath)
 
     def getFilesByRank(self, rank, size, globalArgs):
         ''' divide files to process into batches among nodes '''
@@ -82,27 +91,28 @@ class PyLaueGo:
 
     def getInputFileNamesList(self, depthRange, scanPoint, args):
         ''' generate the list of files name for analysis '''
-        allFiles = []
-        for root, dirs, files in os.walk(args.filefolder):
-            for name in files:
-                if name.endswith('h5'):
-                    allFiles.append(name)
         fnames = []
         if depthRange is not None and scanPoint is not None:
             for ii in range(len(scanPoint)):
                 for jj in range (len(depthRange)):
                     fname = f'{args.filenamePrefix}{scanPoint[ii]}_{depthRange[jj]}.h5'
-                    if os.path.isfile(f"{args.filefolder}/{fname}"):
+                    if os.path.isfile(os.path.join(args.filefolder, fname)):
                         fnames.append(fname)
         elif scanPoint is not None:
             for ii in range(len(scanPoint)):
                 # if the depthRange exist
                 fname = f'{args.filenamePrefix}{scanPoint[ii]}.h5'
-                if os.path.isfile(f"{args.filefolder}/{fname}"):
+                if os.path.isfile(os.path.join(args.filefolder, fname)):
                     fnames.append(fname)
         else:
             #process them all
-            fnames = allFiles
+            for root, dirs, files in os.walk(args.filefolder):
+                for name in files:
+                    if name.endswith('h5'):
+                        fnames.append(name)
+        fileCount = len(fnames)
+        estTime = fileCount * 3.5 / 100
+        print(f"Estimated time to completion: {estTime} minutes for {fileCount} files")
         return fnames
 
     def processFile(self, filename, globalArgs):
@@ -128,7 +138,7 @@ class PyLaueGo:
 
     def parseInputFile(self, filename, args):
         ''' parse input h5 file '''
-        filename = f"{args.filefolder}/{filename}"
+        filename = os.path.join(args.filefolder, filename)
         attrsNameMap = {
             'title': 'entry1/title',
             'sampleName': 'entry1/sample/name',
@@ -163,19 +173,20 @@ class PyLaueGo:
         	-K mask_file_name (use pixels with mask==0)
         	-D distortion map file name
         '''
-        peakSearchPath = args.pathbins + '/peaksearch/peaksearch'
-        peakSearchOut = f'{args.outputFolder}/peaks/peaks_{filename[:-3]}.txt'
-        fullPath = f'{args.filefolder}/{filename}'
-        cmd = [peakSearchPath, '-b', str(args.boxsize), '-R', str(args.maxRfactor),
+        peakSearchOutDirectory = os.path.join(args.outputFolder, 'peaks')
+        peakSearchCmdPath = os.path.join(args.pathbins, 'peaksearch/peaksearch')
+        peakSearchOutFile = os.path.join(peakSearchOutDirectory, f'peaks_{filename[:-3]}.txt')
+        fullPath = os.path.join(args.filefolder, filename)
+        cmd = [peakSearchCmdPath, '-b', str(args.boxsize), '-R', str(args.maxRfactor),
             '-m', str(args.min_size), '-s', str(args.min_separation), '-t', str(args.threshold),
             '-p', args.peakShape, '-M', str(args.max_peaks)]
         if args.maskFile:
             cmd += ['-K', args.maskFile]
         if args.smooth:
             cmd += ['-S', '']
-        cmd += [fullPath, peakSearchOut]
+        cmd += [fullPath, peakSearchOutFile]
         self.runCmdAndCheckOutput(cmd)
-        return peakSearchOut
+        return peakSearchOutFile
 
     def parsePeaksFile(self, peaksFile, args):
         '''
@@ -220,11 +231,12 @@ class PyLaueGo:
         		-x crystal description file
         !/data34/JZT/server336/bin/pixels2qs -g './KaySong/geoN_2021-10-26_18-28-16.xml' -x './KaySong/Fe.xml' 'temp.txt' 'temp_Peaks2G.txt'
         '''
-        p2qOut = f'{args.outputFolder}/p2q/p2q_{filename[:-3]}.txt'
-        p2qPath =  args.pathbins + '/pixels2qs/pix2qs'
-        cmd = [p2qPath, '-g', args.geoFile, '-x', args.crystFile, peakSearchOut, p2qOut]
+        p2qOutDirectory = os.path.join(args.outputFolder, 'p2q')
+        p2qOutFile = os.path.join(p2qOutDirectory, f'p2q_{filename[:-3]}.txt')
+        p2qCmdPath =  os.path.join(args.pathbins, 'pixels2qs/pix2qs')
+        cmd = [p2qCmdPath, '-g', args.geoFile, '-x', args.crystFile, peakSearchOut, p2qOutFile]
         self.runCmdAndCheckOutput(cmd)
-        return p2qOut
+        return p2qOutFile
 
     def parseP2QFile(self, p2qFile, args):
         '''
@@ -282,13 +294,14 @@ class PyLaueGo:
         #		$defaultFolder	default folder to prepend to file names
         #!/data34/JZT/server336/bin/euler -q -k 30.0 -t 35.0 -a 0.12 -h 0 0 1 -c 72.0 -f 'temp_Peaks2G.txt' -o 'temp_4Index.txt'
         '''
-        indexPath = args.pathbins + '/euler/euler'
-        indexOut = f'{args.outputFolder}/index/index_{filename[:-3]}.txt'
-        cmd = [indexPath, '-q', '-k', str(args.indexKeVmaxCalc), '-t', str(args.indexKeVmaxTest),
+        indexCmdPath = os.path.join(args.pathbins, 'euler/euler')
+        indexOutDirectory = os.path.join(args.outputFolder, 'index')
+        indexOutFile = os.path.join(indexOutDirectory, f'index_{filename[:-3]}.txt')
+        cmd = [indexCmdPath, '-q', '-k', str(args.indexKeVmaxCalc), '-t', str(args.indexKeVmaxTest),
             '-a', str(args.indexAngleTolerance), '-c', str(args.indexCone), '-f', p2qOut, '-h',
-            str(args.indexH), str(args.indexK), str(args.indexL), '-o', indexOut]
+            str(args.indexH), str(args.indexK), str(args.indexL), '-o', indexOutFile]
         if not self.runCmdAndCheckOutput(cmd):
-            return indexOut
+            return indexOutFile
 
     def parseIndexFile(self, indexFile, args):
         '''
@@ -338,7 +351,6 @@ class PyLaueGo:
         setattr(args, 'Npatterns', args.NpatternsFound)
         args.latticeParameters = args.latticeParameters.replace('}', '').replace('{', '').strip()
         args = self.getRecipLatticeStar(args)
-        args = self.getAtom(args)
         return args
 
     def getRecipLatticeStar(self, args):
@@ -352,20 +364,6 @@ class PyLaueGo:
             setattr(args, f'astar{i}', rl[0])
             setattr(args, f'bstar{i}', rl[1])
             setattr(args, f'cstar{i}', rl[2])
-        return args
-
-    def getAtom(self, args):
-        '''
-        parse out values of atom description
-        from AtomDesctiption1='{Ni001  0 0 0 1} to
-        #<atom Ni=\'30\' label=\'Ni001\' n=\'1\' symbol=\'Ni\'>0 0 0</atom>\n
-        '''
-        setattr(args, 'Ni', args.NiData)
-        atom = args.AtomDesctiption1.replace('}', '').replace('{', '').split()
-        setattr(args, 'n', atom[-1])
-        setattr(args, 'label', atom[0])
-        setattr(args, 'atom', ' '.join(atom[1:3]))
-        setattr(args, 'symbol', args.label[:2])
         return args
 
     def runCmdAndCheckOutput(self, cmd):
