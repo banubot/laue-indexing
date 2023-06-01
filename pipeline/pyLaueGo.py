@@ -65,6 +65,8 @@ class PyLaueGo:
     def createOutputDirectories(self, args):
         ''' set up output directory structure '''
         outputDirectories = ['peaks', 'p2q', 'index', 'error']
+        if not os.path.exists(args.outputFolder):
+            os.mkdir(args.outputFolder)
         for dir in outputDirectories:
             fullPath = os.path.join(args.outputFolder, dir)
             if not os.path.exists(fullPath):

@@ -1,22 +1,24 @@
 from gladier import GladierBaseTool, generate_flow_definition
 
 
-def launch(**data) -> int:
+def remote_indexing(**data) -> int:
     import subprocess
 
-    script = '/eagle/projects/APSDataAnalysis/hparraga/laue-indexing/pipeline/pyLaueGo.py'
-    mpiCmd = 'mpirun -np 32 python'
-    configFile = f"--configFile {data['config_destination_path']}"
-    crystalFile = f"--crystFile {data['crystal_destination_path']}"
-    geoFile = f"--geoFile {data['geo_destination_path']}"
-    inputDir = f"--filefolder {data['input_destination_path']}"
-    outputDir = f"--outputFolder {data['output_source_path']}"
-    filenamePrefix = f"--filenamePrefix {data['label']}_"
-    subprocess.call([mpiCmd, script, configFile, crystalFile, geoFile, inputDir, outputDir, filenamePrefix])
-
+    pathbins = '/eagle/projects/APSDataAnalysis/hparraga/laue-indexing'
+    script = f'{pathbins}/pipeline/pyLaueGo.py'
+    cmd = ['mpirun', '-np', '1', 'python', script,
+        '--configFile', f"{data['remote_path']}{data['config_destination_path']}", # + \
+        '--crystFile', f"{data['remote_path']}{data['crystal_destination_path']}",
+        '--geoFile', f"{data['remote_path']}{data['geo_destination_path']}",
+        '--filefolder', f"{data['remote_path']}{data['input_destination_path']}",
+        '--outputFolder', f"{data['remote_path']}{data['output_source_path']}",
+        '--pathbins', pathbins,
+        '--filenamePrefix', f"{data['label']}_"]
+    result = subprocess.run(cmd, capture_output=True)
+    return result.returncode, result.stdout.decode("utf-8"), result.stderr.decode("utf-8")
 
 @generate_flow_definition(modifiers={
-    launch: {'WaitTime': 1000000,
+    remote_indexing: {'WaitTime': 1000000,
                       'ExceptionOnActionFailure': True}
 })
 class RemoteIndexing(GladierBaseTool):
@@ -28,9 +30,10 @@ class RemoteIndexing(GladierBaseTool):
         'geo_destination_path',
         'input_destination_path',
         'output_source_path',
+        'remote_path',
         'label'
     ]
 
     funcx_functions = [
-        launch
+        remote_indexing
     ]

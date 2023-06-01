@@ -45,20 +45,21 @@ if __name__ == '__main__':
     localEndpoint = 'b0e921df-6d04-11e5-ba46-22000b92c6ec'
     #eagle guest collection
     remoteEndpoint = 'fd5a47b6-5fb0-4d85-b5eb-81ae993b1291'
+    remotePath = '/eagle/APSDataProcessing/aps34ide'
     #globus compute personal endpoint
     computeEndpoint = '347c30d8-4adc-4522-8774-b451a60c0923'
     #staging directory on eagle
     stagingDir = f'/staging/{args.label}'
     configDir = f'{stagingDir}/config'
     remoteInputDir = f'{stagingDir}/data'
-    remoteOutputDir = f'{stagingDir}/processed'
+    remoteOutputDir = stagingDir #f'{stagingDir}/processed'
 
     flow_input = {
         'input': {
             #endpoints
             'local_endpoint_id': localEndpoint,
             'remote_endpoint_id': remoteEndpoint,
-            'funcx_endpoint_compute': remoteEndpoint,
+            'funcx_endpoint_compute': computeEndpoint,
 
             #transfer files
             'config_source_path': args.configFile,
@@ -72,7 +73,8 @@ if __name__ == '__main__':
             'output_source_path': remoteOutputDir,
             'output_destination_path': args.outputDir,
 
-            'label': args.label
+            'label': args.label,
+            'remote_path': remotePath
         }
     }
 
